@@ -1,5 +1,6 @@
 import { ArrowRight, Check } from 'lucide-react';
 import {
+  AnimatePresence,
   motion,
   useInView,
   useScroll,
@@ -85,6 +86,40 @@ const features: Feature[] = [
       '为深度创作与内部放映静默通知。',
       '按项目阶段切换环境声景。',
       '同步评审、拍摄、剪辑与恢复节奏。',
+    ],
+  },
+];
+
+const dreamSceneFeatures: Feature[] = [
+  ...features,
+  {
+    number: '04',
+    title: '视觉实验。',
+    image: featureImages[0],
+    items: [
+      '用生成图像测试概念、构图与情绪走向。',
+      '把抽象想法拆成可比较的视觉方向。',
+      '保留可复用的提示词、参考图与迭代记录。',
+    ],
+  },
+  {
+    number: '05',
+    title: '交互原型。',
+    image: featureImages[1],
+    items: [
+      '把灵感快速落成可点击、可验证的小工具。',
+      '用动效检验节奏，而不是停留在静态稿。',
+      '让每次试验都能留下可复盘的产品判断。',
+    ],
+  },
+  {
+    number: '06',
+    title: '叙事拼图。',
+    image: featureImages[2],
+    items: [
+      '把文本、画面与交互组合成完整表达。',
+      '为不同主题调试语气、节拍与反馈方式。',
+      '让小作品成为持续生长的创意样本库。',
     ],
   },
 ];
@@ -490,12 +525,18 @@ function About() {
 
 function FeatureCard({
   animationMode = 'default',
+  animateState = 'visible',
+  fillContainer = false,
   feature,
+  presenceAnimated = false,
   showCta = true,
   showNumber = true,
 }: {
   animationMode?: FeatureAnimationMode;
+  animateState?: 'hidden' | 'visible';
   feature: Feature;
+  fillContainer?: boolean;
+  presenceAnimated?: boolean;
   showCta?: boolean;
   showNumber?: boolean;
 }) {
@@ -534,8 +575,15 @@ function FeatureCard({
 
   return (
     <motion.article
-      className="flex min-h-[380px] flex-col justify-between bg-[#212121] p-5 sm:min-h-[420px] sm:p-6 lg:min-h-0"
+      animate={presenceAnimated ? animateState : undefined}
+      className={
+        fillContainer
+          ? 'absolute inset-0 flex h-full min-h-0 flex-col justify-between bg-[#212121] p-5 sm:p-6'
+          : 'flex min-h-[380px] flex-col justify-between bg-[#212121] p-5 sm:min-h-[420px] sm:p-6 lg:min-h-0'
+      }
       data-motion={animationMode}
+      exit={presenceAnimated ? 'hidden' : undefined}
+      initial={presenceAnimated ? 'hidden' : undefined}
       variants={variants}
     >
       <div>
@@ -641,10 +689,105 @@ function VideoCard({
   );
 }
 
+function getVisibleFeatureCards(cards: Feature[], activeIndex: number, slotCount = 3) {
+  if (cards.length === 0) {
+    return [];
+  }
+
+  const visibleCount = Math.min(slotCount, cards.length);
+
+  return Array.from({ length: visibleCount }, (_, slotIndex) => {
+    const cardIndex = (activeIndex + slotIndex) % cards.length;
+    return cards[cardIndex];
+  });
+}
+
+function PaginatedFeatureCards({
+  activeIndex,
+  animationMode,
+  animateState,
+  cards,
+  showCardCta,
+  showCardNumbers,
+}: {
+  activeIndex: number;
+  animationMode: FeatureAnimationMode;
+  animateState: 'hidden' | 'visible';
+  cards: Feature[];
+  showCardCta: boolean;
+  showCardNumbers: boolean;
+}) {
+  return (
+    <>
+      {getVisibleFeatureCards(cards, activeIndex).map((feature, slotIndex) => (
+        <div
+          className="relative min-h-[380px] overflow-hidden bg-[#212121] sm:min-h-[420px] lg:min-h-0"
+          key={`feature-slot-${slotIndex}`}
+        >
+          <AnimatePresence mode="wait">
+            <FeatureCard
+              animateState={animateState}
+              animationMode={animationMode}
+              feature={feature}
+              fillContainer
+              key={`feature-${slotIndex}-${feature.number}`}
+              presenceAnimated
+              showCta={showCardCta}
+              showNumber={showCardNumbers}
+            />
+          </AnimatePresence>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function FeaturePagination({
+  activeIndex,
+  cards,
+  isReverseLayout,
+  onChange,
+}: {
+  activeIndex: number;
+  cards: Feature[];
+  isReverseLayout: boolean;
+  onChange: (index: number) => void;
+}) {
+  const positionClass = isReverseLayout ? 'right-3 sm:right-4' : 'left-3 sm:left-4';
+
+  return (
+    <div
+      className={`absolute top-3 z-20 grid h-8 w-28 grid-cols-6 rounded-full bg-black/55 p-1 ring-1 ring-white/10 backdrop-blur-md sm:top-4 ${positionClass}`}
+      aria-label="造梦现场分页"
+      role="navigation"
+    >
+      {cards.map((feature, index) => {
+        const isActive = activeIndex === index;
+
+        return (
+          <button
+            aria-label={`切换到第 ${index + 1} 页`}
+            aria-pressed={isActive}
+            className={`h-6 min-w-0 rounded-full text-[10px] leading-6 transition-colors duration-300 ${
+              isActive ? 'bg-primary text-black' : 'text-primary/70 hover:text-primary'
+            }`}
+            key={feature.number}
+            onClick={() => onChange(index)}
+            type="button"
+          >
+            {index + 1}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function Features({
   animationMode = 'default',
   canvasTitle,
   cards = features,
+  enablePagination = false,
   headline,
   showCardCta = true,
   showCardNumbers = true,
@@ -655,6 +798,7 @@ function Features({
   animationMode?: FeatureAnimationMode;
   canvasTitle: string;
   cards?: Feature[];
+  enablePagination?: boolean;
   headline: string;
   showCardCta?: boolean;
   showCardNumbers?: boolean;
@@ -663,21 +807,41 @@ function Features({
   videoSrc: string;
 }) {
   const [sectionRef, isSectionActive] = useSectionPresence();
+  const [activePageIndex, setActivePageIndex] = useState(0);
   const isReverseLayout = layoutDirection === 'reverse';
-  const gridColumnClass = cards.length === 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+  const isPaginated = enablePagination && cards.length > 3;
+  const visibleCardCount = isPaginated ? Math.min(3, cards.length) : cards.length;
+  const gridColumnClass = visibleCardCount === 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
   const gridVariants = useMemo(() => getFeatureGridVariants(layoutDirection), [layoutDirection]);
   const videoCard = (
     <VideoCard animationMode={animationMode} title={canvasTitle} videoSrc={videoSrc} />
   );
-  const featureCards = cards.map((feature) => (
-    <FeatureCard
+  const featureCards = isPaginated ? (
+    <PaginatedFeatureCards
+      activeIndex={activePageIndex}
+      animateState={isSectionActive ? 'visible' : 'hidden'}
       animationMode={animationMode}
-      feature={feature}
-      key={feature.number}
-      showCta={showCardCta}
-      showNumber={showCardNumbers}
+      cards={cards}
+      showCardCta={showCardCta}
+      showCardNumbers={showCardNumbers}
     />
-  ));
+  ) : (
+    cards.map((feature) => (
+      <FeatureCard
+        animationMode={animationMode}
+        feature={feature}
+        key={feature.number}
+        showCta={showCardCta}
+        showNumber={showCardNumbers}
+      />
+    ))
+  );
+
+  useEffect(() => {
+    if (activePageIndex > cards.length - 1) {
+      setActivePageIndex(0);
+    }
+  }, [activePageIndex, cards.length]);
 
   return (
     <section
@@ -703,15 +867,26 @@ function Features({
           </h2>
         </header>
 
-        <motion.div
-          className={`grid gap-3 sm:gap-2 md:grid-cols-2 md:gap-1 lg:h-[480px] ${gridColumnClass}`}
-          animate={isSectionActive ? 'visible' : 'hidden'}
-          initial="hidden"
-          variants={gridVariants}
-        >
-          {isReverseLayout ? featureCards : videoCard}
-          {isReverseLayout ? videoCard : featureCards}
-        </motion.div>
+        <div className="relative">
+          <motion.div
+            className={`grid gap-3 sm:gap-2 md:grid-cols-2 md:gap-1 lg:h-[480px] ${gridColumnClass}`}
+            animate={isSectionActive ? 'visible' : 'hidden'}
+            initial="hidden"
+            variants={gridVariants}
+          >
+            {isReverseLayout ? featureCards : videoCard}
+            {isReverseLayout ? videoCard : featureCards}
+          </motion.div>
+
+          {isPaginated ? (
+            <FeaturePagination
+              activeIndex={activePageIndex}
+              cards={cards}
+              isReverseLayout={isReverseLayout}
+              onChange={setActivePageIndex}
+            />
+          ) : null}
+        </div>
       </div>
     </section>
   );
@@ -744,7 +919,9 @@ export default function App() {
         videoSrc={siteMedia.featureVideos.projectExperience}
       />
       <Features
+        cards={dreamSceneFeatures}
         canvasTitle="造梦现场"
+        enablePagination
         headline="每一个小作品，都是我把想象交给代码验证的现场。"
         sectionId="features-copy-2"
         videoSrc={siteMedia.featureVideos.dreamScene}
