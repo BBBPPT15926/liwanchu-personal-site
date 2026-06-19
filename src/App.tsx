@@ -1,6 +1,5 @@
 import { ArrowRight, Check } from 'lucide-react';
 import {
-  AnimatePresence,
   motion,
   useInView,
   useScroll,
@@ -50,6 +49,8 @@ type Feature = {
   items: string[];
 };
 
+type FeatureDisplayMode = 'cards' | 'dream-squares';
+
 const featureImages = [
   'https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260405_171918_4a5edc79-d78f-4637-ac8b-53c43c220606.png&w=1280&q=85',
   'https://images.higgs.ai/?default=1&output=webp&url=https%3A%2F%2Fd8j0ntlcm91z4.cloudfront.net%2Fuser_38xzZboKViGWJOttwIXH07lWA1P%2Fhf_20260405_171741_ed9845ab-f5b2-4018-8ce7-07cc01823522.png&w=1280&q=85',
@@ -91,15 +92,44 @@ const features: Feature[] = [
 ];
 
 const dreamSceneFeatures: Feature[] = [
-  ...features,
+  {
+    number: '01',
+    title: '项目分镜。',
+    image: featureImages[0],
+    items: [
+      '整理参考、节奏与视觉提示。',
+      '共享时间线与镜头清单。',
+      '沉淀可复用分镜素材。',
+    ],
+  },
+  {
+    number: '02',
+    title: '智能评审。',
+    image: featureImages[1],
+    items: [
+      '分析节奏、对比与连续性。',
+      '把反馈转成创作决策。',
+      '让评审贴近工作文件。',
+    ],
+  },
+  {
+    number: '03',
+    title: '沉浸舱。',
+    image: featureImages[2],
+    items: [
+      '静默通知，保留创作状态。',
+      '按阶段切换环境声景。',
+      '同步评审、拍摄与剪辑节奏。',
+    ],
+  },
   {
     number: '04',
     title: '视觉实验。',
     image: featureImages[0],
     items: [
-      '用生成图像测试概念、构图与情绪走向。',
-      '把抽象想法拆成可比较的视觉方向。',
-      '保留可复用的提示词、参考图与迭代记录。',
+      '测试概念、构图与情绪走向。',
+      '比较不同视觉方向。',
+      '保留提示词与迭代记录。',
     ],
   },
   {
@@ -107,9 +137,9 @@ const dreamSceneFeatures: Feature[] = [
     title: '交互原型。',
     image: featureImages[1],
     items: [
-      '把灵感快速落成可点击、可验证的小工具。',
-      '用动效检验节奏，而不是停留在静态稿。',
-      '让每次试验都能留下可复盘的产品判断。',
+      '把灵感落成可点击工具。',
+      '用动效检验交互节奏。',
+      '留下可复盘的产品判断。',
     ],
   },
   {
@@ -117,9 +147,9 @@ const dreamSceneFeatures: Feature[] = [
     title: '叙事拼图。',
     image: featureImages[2],
     items: [
-      '把文本、画面与交互组合成完整表达。',
-      '为不同主题调试语气、节拍与反馈方式。',
-      '让小作品成为持续生长的创意样本库。',
+      '组合文本、画面与交互。',
+      '调试语气、节拍与反馈。',
+      '沉淀创意样本库。',
     ],
   },
 ];
@@ -385,18 +415,44 @@ function useHashAnchorScroll() {
   }, []);
 }
 
-function Hero() {
+function Hero({ onVideoReady }: { onVideoReady: () => void }) {
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const hasReportedReady = useRef(false);
+
+  const handleVideoReady = () => {
+    setIsVideoReady(true);
+
+    if (!hasReportedReady.current) {
+      hasReportedReady.current = true;
+      onVideoReady();
+    }
+  };
+
   return (
     <section className="relative h-screen bg-black p-4 md:p-6" id="hero">
       <div className="relative h-full overflow-hidden rounded-2xl bg-black md:rounded-[2rem]">
+        <img
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+            isVideoReady ? 'opacity-0' : 'opacity-100'
+          }`}
+          src={siteMedia.heroPosterSrc}
+          alt=""
+          decoding="async"
+          fetchPriority="high"
+        />
         <video
-          className="absolute inset-0 h-full w-full object-cover"
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+            isVideoReady ? 'opacity-100' : 'opacity-0'
+          }`}
           src={siteMedia.heroVideoSrc}
           autoPlay
           loop
           muted
+          onCanPlay={handleVideoReady}
+          onLoadedData={handleVideoReady}
           playsInline
-          preload="metadata"
+          poster={siteMedia.heroPosterSrc}
+          preload="auto"
         />
         <div className="noise-overlay pointer-events-none absolute inset-0 opacity-[0.7] mix-blend-overlay" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
@@ -525,18 +581,12 @@ function About() {
 
 function FeatureCard({
   animationMode = 'default',
-  animateState = 'visible',
-  fillContainer = false,
   feature,
-  presenceAnimated = false,
   showCta = true,
   showNumber = true,
 }: {
   animationMode?: FeatureAnimationMode;
-  animateState?: 'hidden' | 'visible';
   feature: Feature;
-  fillContainer?: boolean;
-  presenceAnimated?: boolean;
   showCta?: boolean;
   showNumber?: boolean;
 }) {
@@ -575,15 +625,8 @@ function FeatureCard({
 
   return (
     <motion.article
-      animate={presenceAnimated ? animateState : undefined}
-      className={
-        fillContainer
-          ? 'absolute inset-0 flex h-full min-h-0 flex-col justify-between bg-[#212121] p-5 sm:p-6'
-          : 'flex min-h-[380px] flex-col justify-between bg-[#212121] p-5 sm:min-h-[420px] sm:p-6 lg:min-h-0'
-      }
+      className="flex min-h-[380px] flex-col justify-between bg-[#212121] p-5 sm:min-h-[420px] sm:p-6 lg:min-h-0"
       data-motion={animationMode}
-      exit={presenceAnimated ? 'hidden' : undefined}
-      initial={presenceAnimated ? 'hidden' : undefined}
       variants={variants}
     >
       <div>
@@ -626,10 +669,12 @@ function FeatureCard({
 
 function VideoCard({
   animationMode = 'default',
+  shouldLoad = true,
   title,
   videoSrc,
 }: {
   animationMode?: FeatureAnimationMode;
+  shouldLoad?: boolean;
   title: string;
   videoSrc: string;
 }) {
@@ -674,12 +719,12 @@ function VideoCard({
     >
       <video
         className="absolute inset-0 h-full w-full object-cover"
-        src={videoSrc}
-        autoPlay
+        src={shouldLoad ? videoSrc : undefined}
+        autoPlay={shouldLoad}
         loop
         muted
         playsInline
-        preload="metadata"
+        preload={shouldLoad ? 'auto' : 'none'}
       />
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/5 to-transparent" />
       <p className="absolute bottom-5 left-5 right-5 text-2xl leading-[0.95] sm:bottom-6 sm:left-6 sm:right-6 sm:text-3xl">
@@ -689,97 +734,127 @@ function VideoCard({
   );
 }
 
-function getVisibleFeatureCards(cards: Feature[], activeIndex: number, slotCount = 3) {
-  if (cards.length === 0) {
-    return [];
-  }
-
-  const visibleCount = Math.min(slotCount, cards.length);
-
-  return Array.from({ length: visibleCount }, (_, slotIndex) => {
-    const cardIndex = (activeIndex + slotIndex) % cards.length;
-    return cards[cardIndex];
-  });
-}
-
-function PaginatedFeatureCards({
-  activeIndex,
+function DreamFeatureSquare({
   animationMode,
-  animateState,
-  cards,
-  showCardCta,
-  showCardNumbers,
+  feature,
+  showCta,
 }: {
-  activeIndex: number;
   animationMode: FeatureAnimationMode;
-  animateState: 'hidden' | 'visible';
-  cards: Feature[];
-  showCardCta: boolean;
-  showCardNumbers: boolean;
+  feature: Feature;
+  showCta: boolean;
 }) {
+  const title = feature.title.replace(/[。.]$/, '');
+  const isImpact = animationMode === 'impact';
+  const variants = isImpact
+    ? {
+        hidden: {
+          x: '-115vw',
+          opacity: 0,
+          scale: 0.98,
+          transition: { duration: 0.48, ease: cardEase },
+        },
+        visible: {
+          x: ['-115vw', 22, -8, 0],
+          opacity: [0, 1, 1, 1],
+          scale: [0.98, 1.015, 0.995, 1],
+          transition: {
+            duration: 0.88,
+            ease: cardEase,
+            times: [0, 0.72, 0.88, 1],
+          },
+        },
+      }
+    : {
+        hidden: {
+          opacity: 0,
+          scale: 0.95,
+          transition: { duration: 0.48, ease: cardEase },
+        },
+        visible: {
+          opacity: 1,
+          scale: 1,
+          transition: { duration: 0.8, ease: cardEase },
+        },
+      };
+
   return (
-    <>
-      {getVisibleFeatureCards(cards, activeIndex).map((feature, slotIndex) => (
-        <div
-          className="relative min-h-[380px] overflow-hidden bg-[#212121] sm:min-h-[420px] lg:min-h-0"
-          key={`feature-slot-${slotIndex}`}
-        >
-          <AnimatePresence mode="wait">
-            <FeatureCard
-              animateState={animateState}
-              animationMode={animationMode}
-              feature={feature}
-              fillContainer
-              key={`feature-${slotIndex}-${feature.number}`}
-              presenceAnimated
-              showCta={showCardCta}
-              showNumber={showCardNumbers}
-            />
-          </AnimatePresence>
+    <motion.article
+      className="flex aspect-square h-full max-w-full flex-col justify-between bg-[#212121] p-4 sm:p-5"
+      data-motion={animationMode}
+      variants={variants}
+    >
+      <div>
+        <div className="flex items-start gap-4">
+          <img
+            className="h-12 w-12 shrink-0 rounded object-cover sm:h-14 sm:w-14"
+            src={feature.image}
+            alt=""
+            loading="lazy"
+          />
+          <div className="min-w-0 flex-1 pt-1">
+            <h3 className="truncate text-xl leading-none text-primary sm:text-2xl">{title}</h3>
+          </div>
         </div>
-      ))}
-    </>
+
+        <ul className="mt-5 space-y-1.5 text-[11px] leading-[1.32] text-gray-400 sm:text-xs">
+          {feature.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+
+      {showCta ? (
+        <a
+          className="mt-3 inline-flex w-max items-center gap-2 text-xs text-primary transition-opacity hover:opacity-70 sm:text-sm"
+          href="mailto:hello@prisma.studio?subject=%E4%BA%86%E8%A7%A3%E6%9B%B4%E5%A4%9A%E6%A3%B1%E9%95%9C%E4%BF%A1%E6%81%AF"
+        >
+          了解更多
+          <ArrowRight className="h-3.5 w-3.5 -rotate-45" strokeWidth={1.8} />
+        </a>
+      ) : null}
+    </motion.article>
   );
 }
 
-function FeaturePagination({
-  activeIndex,
+function DreamFeatureSquares({
+  animationMode,
   cards,
-  isReverseLayout,
-  onChange,
+  showCardCta,
 }: {
-  activeIndex: number;
+  animationMode: FeatureAnimationMode;
   cards: Feature[];
-  isReverseLayout: boolean;
-  onChange: (index: number) => void;
+  showCardCta: boolean;
 }) {
-  const positionClass = isReverseLayout ? 'right-3 sm:right-4' : 'left-3 sm:left-4';
+  const variants = {
+    hidden: {
+      transition: {
+        staggerChildren: 0.12,
+        staggerDirection: -1,
+      },
+    },
+    visible: {
+      transition: {
+        staggerChildren: 0.15,
+        staggerDirection: 1,
+      },
+    },
+  };
 
   return (
-    <div
-      className={`absolute top-3 z-20 grid h-8 w-28 grid-cols-6 rounded-full bg-black/55 p-1 ring-1 ring-white/10 backdrop-blur-md sm:top-4 ${positionClass}`}
-      aria-label="造梦现场分页"
-      role="navigation"
+    <motion.div
+      className="grid min-h-[380px] gap-1 sm:min-h-[420px] sm:grid-cols-2 lg:col-span-3 lg:h-full lg:min-h-0 lg:w-max lg:justify-self-center lg:grid-cols-[repeat(3,238px)] lg:grid-rows-2"
+      variants={variants}
     >
-      {cards.map((feature, index) => {
-        const isActive = activeIndex === index;
-
-        return (
-          <button
-            aria-label={`切换到第 ${index + 1} 页`}
-            aria-pressed={isActive}
-            className={`h-6 min-w-0 rounded-full text-[10px] leading-6 transition-colors duration-300 ${
-              isActive ? 'bg-primary text-black' : 'text-primary/70 hover:text-primary'
-            }`}
-            key={feature.number}
-            onClick={() => onChange(index)}
-            type="button"
-          >
-            {index + 1}
-          </button>
-        );
-      })}
-    </div>
+      {cards.map((feature) => (
+        <div className="flex min-h-0" key={feature.number}>
+          <DreamFeatureSquare
+            animationMode={animationMode}
+            feature={feature}
+            showCta={showCardCta}
+          />
+        </div>
+      ))}
+    </motion.div>
   );
 }
 
@@ -787,10 +862,11 @@ function Features({
   animationMode = 'default',
   canvasTitle,
   cards = features,
-  enablePagination = false,
+  featureDisplay = 'cards',
   headline,
   showCardCta = true,
   showCardNumbers = true,
+  shouldLoadVideo = true,
   layoutDirection = 'normal',
   sectionId = 'features',
   videoSrc,
@@ -798,32 +874,35 @@ function Features({
   animationMode?: FeatureAnimationMode;
   canvasTitle: string;
   cards?: Feature[];
-  enablePagination?: boolean;
+  featureDisplay?: FeatureDisplayMode;
   headline: string;
   showCardCta?: boolean;
   showCardNumbers?: boolean;
+  shouldLoadVideo?: boolean;
   layoutDirection?: FeatureLayoutDirection;
   sectionId?: string;
   videoSrc: string;
 }) {
   const [sectionRef, isSectionActive] = useSectionPresence();
-  const [activePageIndex, setActivePageIndex] = useState(0);
   const isReverseLayout = layoutDirection === 'reverse';
-  const isPaginated = enablePagination && cards.length > 3;
-  const visibleCardCount = isPaginated ? Math.min(3, cards.length) : cards.length;
+  const isDreamSquares = featureDisplay === 'dream-squares';
+  const visibleCardCount = isDreamSquares ? Math.ceil(cards.length / 2) : cards.length;
   const gridColumnClass = visibleCardCount === 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+  const gridHeightClass = 'lg:h-[480px]';
   const gridVariants = useMemo(() => getFeatureGridVariants(layoutDirection), [layoutDirection]);
   const videoCard = (
-    <VideoCard animationMode={animationMode} title={canvasTitle} videoSrc={videoSrc} />
+    <VideoCard
+      animationMode={animationMode}
+      shouldLoad={shouldLoadVideo}
+      title={canvasTitle}
+      videoSrc={videoSrc}
+    />
   );
-  const featureCards = isPaginated ? (
-    <PaginatedFeatureCards
-      activeIndex={activePageIndex}
-      animateState={isSectionActive ? 'visible' : 'hidden'}
+  const featureCards = isDreamSquares ? (
+    <DreamFeatureSquares
       animationMode={animationMode}
       cards={cards}
       showCardCta={showCardCta}
-      showCardNumbers={showCardNumbers}
     />
   ) : (
     cards.map((feature) => (
@@ -836,12 +915,6 @@ function Features({
       />
     ))
   );
-
-  useEffect(() => {
-    if (activePageIndex > cards.length - 1) {
-      setActivePageIndex(0);
-    }
-  }, [activePageIndex, cards.length]);
 
   return (
     <section
@@ -867,43 +940,62 @@ function Features({
           </h2>
         </header>
 
-        <div className="relative">
-          <motion.div
-            className={`grid gap-3 sm:gap-2 md:grid-cols-2 md:gap-1 lg:h-[480px] ${gridColumnClass}`}
-            animate={isSectionActive ? 'visible' : 'hidden'}
-            initial="hidden"
-            variants={gridVariants}
-          >
-            {isReverseLayout ? featureCards : videoCard}
-            {isReverseLayout ? videoCard : featureCards}
-          </motion.div>
-
-          {isPaginated ? (
-            <FeaturePagination
-              activeIndex={activePageIndex}
-              cards={cards}
-              isReverseLayout={isReverseLayout}
-              onChange={setActivePageIndex}
-            />
-          ) : null}
-        </div>
+        <motion.div
+          className={`grid gap-3 sm:gap-2 md:grid-cols-2 md:gap-1 ${gridHeightClass} ${gridColumnClass}`}
+          animate={isSectionActive ? 'visible' : 'hidden'}
+          initial="hidden"
+          variants={gridVariants}
+        >
+          {isReverseLayout ? featureCards : videoCard}
+          {isReverseLayout ? videoCard : featureCards}
+        </motion.div>
       </div>
     </section>
   );
 }
 
+function FeatureVideoWarmup({ enabled }: { enabled: boolean }) {
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed left-0 top-0 h-px w-px overflow-hidden opacity-0"
+    >
+      {Object.values(siteMedia.featureVideos).map((videoSrc) => (
+        <video key={videoSrc} src={videoSrc} muted playsInline preload="auto" />
+      ))}
+    </div>
+  );
+}
+
 export default function App() {
   useHashAnchorScroll();
+  const [shouldLoadFeatureVideos, setShouldLoadFeatureVideos] = useState(false);
+
+  useEffect(() => {
+    const fallbackTimer = window.setTimeout(() => {
+      setShouldLoadFeatureVideos(true);
+    }, 4500);
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+    };
+  }, []);
 
   return (
     <main className="bg-black text-primary">
-      <Hero />
+      <Hero onVideoReady={() => setShouldLoadFeatureVideos(true)} />
+      <FeatureVideoWarmup enabled={shouldLoadFeatureVideos} />
       <About />
       <Features
         animationMode={firstFeatureAnimationMode}
         cards={workExperienceFeatures}
         canvasTitle="工作经历"
         headline="让 AI 不停留在概念里，而进入各行各业的日常流程。"
+        shouldLoadVideo={shouldLoadFeatureVideos}
         showCardCta={false}
         showCardNumbers={false}
         videoSrc={siteMedia.featureVideos.workExperience}
@@ -914,6 +1006,7 @@ export default function App() {
         headline="每个 AI 项目，都是一次把混沌变成结构的实验。"
         layoutDirection="reverse"
         sectionId="features-copy-1"
+        shouldLoadVideo={shouldLoadFeatureVideos}
         showCardCta={false}
         showCardNumbers={false}
         videoSrc={siteMedia.featureVideos.projectExperience}
@@ -921,9 +1014,10 @@ export default function App() {
       <Features
         cards={dreamSceneFeatures}
         canvasTitle="造梦现场"
-        enablePagination
+        featureDisplay="dream-squares"
         headline="每一个小作品，都是我把想象交给代码验证的现场。"
         sectionId="features-copy-2"
+        shouldLoadVideo={shouldLoadFeatureVideos}
         videoSrc={siteMedia.featureVideos.dreamScene}
       />
     </main>
