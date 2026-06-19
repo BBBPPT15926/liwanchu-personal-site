@@ -842,7 +842,7 @@ function DreamFeatureSquares({
 
   return (
     <motion.div
-      className="grid min-h-[380px] gap-1 sm:min-h-[420px] sm:grid-cols-2 lg:col-span-3 lg:h-full lg:min-h-0 lg:w-max lg:justify-self-center lg:grid-cols-[repeat(3,238px)] lg:grid-rows-2"
+      className="grid min-h-[380px] gap-1 sm:min-h-[420px] sm:grid-cols-2 lg:h-full lg:min-h-0 lg:w-max lg:grid-cols-[repeat(3,238px)] lg:grid-rows-2"
       variants={variants}
     >
       {cards.map((feature) => (
@@ -887,8 +887,13 @@ function Features({
   const isReverseLayout = layoutDirection === 'reverse';
   const isDreamSquares = featureDisplay === 'dream-squares';
   const visibleCardCount = isDreamSquares ? Math.ceil(cards.length / 2) : cards.length;
-  const gridColumnClass = visibleCardCount === 2 ? 'lg:grid-cols-3' : 'lg:grid-cols-4';
+  const gridColumnClass = isDreamSquares
+    ? 'lg:grid-cols-[317px_auto]'
+    : visibleCardCount === 2
+      ? 'lg:grid-cols-[repeat(3,317px)]'
+      : 'lg:grid-cols-4';
   const gridHeightClass = 'lg:h-[480px]';
+  const gridWidthClass = isDreamSquares || visibleCardCount === 2 ? 'lg:mx-auto lg:w-max' : 'w-full';
   const gridVariants = useMemo(() => getFeatureGridVariants(layoutDirection), [layoutDirection]);
   const videoCard = (
     <VideoCard
@@ -941,7 +946,7 @@ function Features({
         </header>
 
         <motion.div
-          className={`grid gap-3 sm:gap-2 md:grid-cols-2 md:gap-1 ${gridHeightClass} ${gridColumnClass}`}
+          className={`grid gap-3 sm:gap-2 md:grid-cols-2 md:gap-1 ${gridHeightClass} ${gridWidthClass} ${gridColumnClass}`}
           animate={isSectionActive ? 'visible' : 'hidden'}
           initial="hidden"
           variants={gridVariants}
