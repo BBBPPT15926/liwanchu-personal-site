@@ -13,7 +13,7 @@ function withBase(path: string) {
 export const siteMedia = {
   heroVideoSrc: configuredHeroVideo
     ? withBase(configuredHeroVideo)
-    : withBase('/media/hero-opening-web.mp4'),
+    : withBase('/media/hero-opening-feishu-20260614.mp4'),
   heroPosterSrc: withBase('/media/hero-opening-poster.jpg'),
   featureVideos: {
     workExperience: withBase('/media/feature-cable.mp4'),

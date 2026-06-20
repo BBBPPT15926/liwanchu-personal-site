@@ -7,6 +7,7 @@ import {
   type MotionValue,
 } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import LetterGlitch from './components/LetterGlitch';
 import { siteMedia } from './siteConfig';
 
 const CREAM_TEXT = '#E1E0CC';
@@ -415,12 +416,28 @@ function useHashAnchorScroll() {
   }, []);
 }
 
-function Hero({ onVideoReady }: { onVideoReady: () => void }) {
+function Hero({
+  onVideoProgress,
+  onVideoReady,
+}: {
+  onVideoProgress: (progress: number) => void;
+  onVideoReady: () => void;
+}) {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const hasReportedReady = useRef(false);
 
+  const reportBufferedProgress = (video: HTMLVideoElement) => {
+    if (!Number.isFinite(video.duration) || video.duration <= 0 || video.buffered.length === 0) {
+      return;
+    }
+
+    const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+    onVideoProgress(Math.min(100, Math.round((bufferedEnd / video.duration) * 100)));
+  };
+
   const handleVideoReady = () => {
     setIsVideoReady(true);
+    onVideoProgress(100);
 
     if (!hasReportedReady.current) {
       hasReportedReady.current = true;
@@ -449,7 +466,10 @@ function Hero({ onVideoReady }: { onVideoReady: () => void }) {
           loop
           muted
           onCanPlay={handleVideoReady}
+          onError={handleVideoReady}
+          onLoadedMetadata={(event) => reportBufferedProgress(event.currentTarget)}
           onLoadedData={handleVideoReady}
+          onProgress={(event) => reportBufferedProgress(event.currentTarget)}
           playsInline
           poster={siteMedia.heroPosterSrc}
           preload="auto"
@@ -976,8 +996,51 @@ function FeatureVideoWarmup({ enabled }: { enabled: boolean }) {
   );
 }
 
+function LoadingIntro({ progress, visible }: { progress: number; visible: boolean }) {
+  const displayProgress = Math.min(100, Math.max(0, Math.round(progress)));
+  const progressAngle = displayProgress * 3.6;
+
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black"
+      animate={visible ? { opacity: 1 } : { opacity: 0, pointerEvents: 'none' }}
+      initial={{ opacity: 1 }}
+      transition={{ duration: 0.7, ease: easeOutExpo }}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,44,44,0.16),rgba(0,0,0,0)_34%)]" />
+      <div
+        className="relative grid h-[178px] w-[178px] place-items-center rounded-full sm:h-[220px] sm:w-[220px]"
+        style={{
+          background: `conic-gradient(from 220deg, rgba(97,220,163,0.42) ${progressAngle}deg, rgba(97,220,163,0.06) ${progressAngle}deg 360deg)`,
+        }}
+      >
+        <div className="absolute inset-[1px] rounded-full bg-black" />
+        <div className="absolute inset-[10px] overflow-hidden rounded-full border border-[#1f5960]/70 bg-black shadow-[0_0_42px_rgba(97,220,163,0.12)]">
+          <LetterGlitch
+            className="opacity-35"
+            glitchColors={['#173a34', '#2c7969', '#3b9bbd']}
+            glitchSpeed={50}
+            smooth
+            outerVignette={false}
+            centerVignette={false}
+          />
+          <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(0,0,0,0)_34%,rgba(0,0,0,0.78)_74%),linear-gradient(rgba(0,0,0,0.36),rgba(0,0,0,0.36))]" />
+        </div>
+        <div className="pointer-events-none relative z-10 flex items-baseline gap-1 font-mono text-[1.65rem] leading-none text-[#c8fff2] drop-shadow-[0_0_18px_rgba(97,220,163,0.55)] sm:text-[2rem]">
+          <span className="text-[#3bbdc5]">/</span>
+          <span>{displayProgress}</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function App() {
   useHashAnchorScroll();
+  const [heroVideoProgress, setHeroVideoProgress] = useState(0);
+  const [isHeroVideoReady, setIsHeroVideoReady] = useState(false);
+  const [loaderProgress, setLoaderProgress] = useState(0);
+  const [showLoader, setShowLoader] = useState(true);
   const [shouldLoadFeatureVideos, setShouldLoadFeatureVideos] = useState(false);
 
   useEffect(() => {
@@ -990,9 +1053,50 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setLoaderProgress((currentProgress) => {
+        const targetProgress = isHeroVideoReady ? 100 : Math.max(heroVideoProgress, 88);
+        const distance = targetProgress - currentProgress;
+
+        if (distance <= 0) {
+          return currentProgress;
+        }
+
+        const step = isHeroVideoReady ? Math.max(distance * 0.3, 3) : Math.max(distance * 0.045, 0.45);
+        return Math.min(targetProgress, currentProgress + step);
+      });
+    }, 80);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [heroVideoProgress, isHeroVideoReady]);
+
+  useEffect(() => {
+    if (!isHeroVideoReady || loaderProgress < 99) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowLoader(false);
+    }, 380);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isHeroVideoReady, loaderProgress]);
+
   return (
     <main className="bg-black text-primary">
-      <Hero onVideoReady={() => setShouldLoadFeatureVideos(true)} />
+      <LoadingIntro progress={loaderProgress} visible={showLoader} />
+      <Hero
+        onVideoProgress={setHeroVideoProgress}
+        onVideoReady={() => {
+          setIsHeroVideoReady(true);
+          setShouldLoadFeatureVideos(true);
+        }}
+      />
       <FeatureVideoWarmup enabled={shouldLoadFeatureVideos} />
       <About />
       <Features
