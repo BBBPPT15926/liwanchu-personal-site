@@ -425,6 +425,7 @@ function Hero({
 }) {
   const [isVideoReady, setIsVideoReady] = useState(false);
   const hasReportedReady = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const reportBufferedProgress = (video: HTMLVideoElement) => {
     if (!Number.isFinite(video.duration) || video.duration <= 0 || video.buffered.length === 0) {
@@ -445,6 +446,30 @@ function Hero({
     }
   };
 
+  useEffect(() => {
+    const video = videoRef.current;
+
+    if (!video) {
+      return;
+    }
+
+    const checkVideoReady = () => {
+      reportBufferedProgress(video);
+
+      if (video.readyState >= 2) {
+        handleVideoReady();
+        void video.play().catch(() => {});
+      }
+    };
+
+    checkVideoReady();
+    const timer = window.setInterval(checkVideoReady, 250);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
   return (
     <section className="relative h-screen bg-black p-4 md:p-6" id="hero">
       <div className="relative h-full overflow-hidden rounded-2xl bg-black md:rounded-[2rem]">
@@ -461,14 +486,18 @@ function Hero({
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
             isVideoReady ? 'opacity-100' : 'opacity-0'
           }`}
+          ref={videoRef}
           src={siteMedia.heroVideoSrc}
           autoPlay
           loop
           muted
           onCanPlay={handleVideoReady}
+          onCanPlayThrough={handleVideoReady}
           onError={handleVideoReady}
           onLoadedMetadata={(event) => reportBufferedProgress(event.currentTarget)}
           onLoadedData={handleVideoReady}
+          onTimeUpdate={handleVideoReady}
+          onPlaying={handleVideoReady}
           onProgress={(event) => reportBufferedProgress(event.currentTarget)}
           playsInline
           poster={siteMedia.heroPosterSrc}
@@ -1002,8 +1031,10 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black"
-      animate={visible ? { opacity: 1 } : { opacity: 0, pointerEvents: 'none' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black ${
+        visible ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
+      animate={{ opacity: visible ? 1 : 0 }}
       initial={{ opacity: 1 }}
       transition={{ duration: 0.7, ease: easeOutExpo }}
     >
@@ -1040,7 +1071,6 @@ export default function App() {
   const [heroVideoProgress, setHeroVideoProgress] = useState(0);
   const [isHeroVideoReady, setIsHeroVideoReady] = useState(false);
   const [loaderProgress, setLoaderProgress] = useState(0);
-  const [showLoader, setShowLoader] = useState(true);
   const [shouldLoadFeatureVideos, setShouldLoadFeatureVideos] = useState(false);
 
   useEffect(() => {
@@ -1050,6 +1080,42 @@ export default function App() {
 
     return () => {
       window.clearTimeout(fallbackTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let hasReleasedHero = false;
+
+    const releaseHero = () => {
+      if (hasReleasedHero) {
+        return;
+      }
+
+      hasReleasedHero = true;
+      setHeroVideoProgress(100);
+      setIsHeroVideoReady(true);
+      setShouldLoadFeatureVideos(true);
+    };
+
+    const inspectHeroVideo = () => {
+      const heroVideo = document.querySelector<HTMLVideoElement>('#hero video');
+
+      if (!heroVideo) {
+        return;
+      }
+
+      if (heroVideo.readyState >= 2 || heroVideo.currentTime > 0) {
+        releaseHero();
+      }
+    };
+
+    inspectHeroVideo();
+    const inspectTimer = window.setInterval(inspectHeroVideo, 250);
+    const maximumWaitTimer = window.setTimeout(releaseHero, 10000);
+
+    return () => {
+      window.clearInterval(inspectTimer);
+      window.clearTimeout(maximumWaitTimer);
     };
   }, []);
 
@@ -1074,22 +1140,17 @@ export default function App() {
   }, [heroVideoProgress, isHeroVideoReady]);
 
   useEffect(() => {
-    if (!isHeroVideoReady || loaderProgress < 99) {
+    if (heroVideoProgress < 100) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      setShowLoader(false);
-    }, 380);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [isHeroVideoReady, loaderProgress]);
+    setIsHeroVideoReady(true);
+    setShouldLoadFeatureVideos(true);
+  }, [heroVideoProgress]);
 
   return (
     <main className="bg-black text-primary">
-      <LoadingIntro progress={loaderProgress} visible={showLoader} />
+      <LoadingIntro progress={loaderProgress} visible={loaderProgress < 99} />
       <Hero
         onVideoProgress={setHeroVideoProgress}
         onVideoReady={() => {
