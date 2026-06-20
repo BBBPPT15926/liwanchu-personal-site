@@ -1030,13 +1030,11 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
   const progressAngle = displayProgress * 3.6;
 
   return (
-    <motion.div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black ${
-        visible ? 'pointer-events-auto' : 'pointer-events-none'
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black transition-opacity duration-700 ${
+        visible ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
       }`}
-      animate={{ opacity: visible ? 1 : 0 }}
-      initial={{ opacity: 1 }}
-      transition={{ duration: 0.7, ease: easeOutExpo }}
+      style={{ opacity: visible ? 1 : 0 }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,44,44,0.16),rgba(0,0,0,0)_34%)]" />
       <div
@@ -1062,7 +1060,7 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
           <span>{displayProgress}</span>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -1075,8 +1073,11 @@ export default function App() {
 
   useEffect(() => {
     const fallbackTimer = window.setTimeout(() => {
+      setHeroVideoProgress(100);
+      setIsHeroVideoReady(true);
+      setLoaderProgress(100);
       setShouldLoadFeatureVideos(true);
-    }, 4500);
+    }, 3800);
 
     return () => {
       window.clearTimeout(fallbackTimer);
@@ -1094,6 +1095,7 @@ export default function App() {
       hasReleasedHero = true;
       setHeroVideoProgress(100);
       setIsHeroVideoReady(true);
+      setLoaderProgress(100);
       setShouldLoadFeatureVideos(true);
     };
 
@@ -1145,6 +1147,7 @@ export default function App() {
     }
 
     setIsHeroVideoReady(true);
+    setLoaderProgress(100);
     setShouldLoadFeatureVideos(true);
   }, [heroVideoProgress]);
 
@@ -1154,6 +1157,7 @@ export default function App() {
       <Hero
         onVideoProgress={setHeroVideoProgress}
         onVideoReady={() => {
+          setLoaderProgress(100);
           setIsHeroVideoReady(true);
           setShouldLoadFeatureVideos(true);
         }}
