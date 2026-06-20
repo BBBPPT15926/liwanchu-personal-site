@@ -7,6 +7,7 @@ import {
   type MotionValue,
 } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Galaxy from './components/Galaxy';
 import LetterGlitch from './components/LetterGlitch';
 import { siteMedia } from './siteConfig';
 
@@ -391,8 +392,12 @@ function useSectionPresence() {
   return [ref, isActive] as const;
 }
 
-function useHashAnchorScroll() {
+function useHashAnchorScroll(isReady: boolean) {
   useEffect(() => {
+    if (!isReady) {
+      return;
+    }
+
     const scrollToHash = () => {
       const hash = window.location.hash.slice(1);
 
@@ -413,37 +418,15 @@ function useHashAnchorScroll() {
       window.clearTimeout(timer);
       window.removeEventListener('hashchange', scrollToHash);
     };
-  }, []);
+  }, [isReady]);
 }
 
-function Hero({
-  onVideoProgress,
-  onVideoReady,
-}: {
-  onVideoProgress: (progress: number) => void;
-  onVideoReady: () => void;
-}) {
+function Hero({ videoSrc }: { videoSrc: string }) {
   const [isVideoReady, setIsVideoReady] = useState(false);
-  const hasReportedReady = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-
-  const reportBufferedProgress = (video: HTMLVideoElement) => {
-    if (!Number.isFinite(video.duration) || video.duration <= 0 || video.buffered.length === 0) {
-      return;
-    }
-
-    const bufferedEnd = video.buffered.end(video.buffered.length - 1);
-    onVideoProgress(Math.min(100, Math.round((bufferedEnd / video.duration) * 100)));
-  };
 
   const handleVideoReady = () => {
     setIsVideoReady(true);
-    onVideoProgress(100);
-
-    if (!hasReportedReady.current) {
-      hasReportedReady.current = true;
-      onVideoReady();
-    }
   };
 
   useEffect(() => {
@@ -454,8 +437,6 @@ function Hero({
     }
 
     const checkVideoReady = () => {
-      reportBufferedProgress(video);
-
       if (video.readyState >= 2) {
         handleVideoReady();
         void video.play().catch(() => {});
@@ -468,7 +449,7 @@ function Hero({
     return () => {
       window.clearInterval(timer);
     };
-  }, []);
+  }, [videoSrc]);
 
   return (
     <section className="relative h-screen bg-black p-4 md:p-6" id="hero">
@@ -487,18 +468,16 @@ function Hero({
             isVideoReady ? 'opacity-100' : 'opacity-0'
           }`}
           ref={videoRef}
-          src={siteMedia.heroVideoSrc}
+          src={videoSrc}
           autoPlay
           loop
           muted
           onCanPlay={handleVideoReady}
           onCanPlayThrough={handleVideoReady}
           onError={handleVideoReady}
-          onLoadedMetadata={(event) => reportBufferedProgress(event.currentTarget)}
           onLoadedData={handleVideoReady}
           onTimeUpdate={handleVideoReady}
           onPlaying={handleVideoReady}
-          onProgress={(event) => reportBufferedProgress(event.currentTarget)}
           playsInline
           poster={siteMedia.heroPosterSrc}
           preload="auto"
@@ -1008,21 +987,155 @@ function Features({
   );
 }
 
-function FeatureVideoWarmup({ enabled }: { enabled: boolean }) {
-  if (!enabled) {
-    return null;
-  }
+type LoadedMediaSources = {
+  heroVideoSrc: string;
+  featureVideos: {
+    workExperience: string;
+    projectExperience: string;
+    dreamScene: string;
+  };
+};
 
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed left-0 top-0 h-px w-px overflow-hidden opacity-0"
-    >
-      {Object.values(siteMedia.featureVideos).map((videoSrc) => (
-        <video key={videoSrc} src={videoSrc} muted playsInline preload="auto" />
-      ))}
-    </div>
-  );
+type PreloadEntryId = 'hero' | 'workExperience' | 'projectExperience' | 'dreamScene';
+
+const preloadVideoEntries: Array<{ id: PreloadEntryId; src: string }> = [
+  { id: 'hero', src: siteMedia.heroVideoSrc },
+  { id: 'workExperience', src: siteMedia.featureVideos.workExperience },
+  { id: 'projectExperience', src: siteMedia.featureVideos.projectExperience },
+  { id: 'dreamScene', src: siteMedia.featureVideos.dreamScene },
+];
+
+function usePreloadedVideos() {
+  const [progress, setProgress] = useState(0);
+  const [sources, setSources] = useState<LoadedMediaSources | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const objectUrls: string[] = [];
+    const loadedBytes = new Map<PreloadEntryId, number>();
+    const totalBytes = new Map<PreloadEntryId, number>();
+    const completedEntries = new Set<PreloadEntryId>();
+
+    const updateProgress = () => {
+      const assetProgress = preloadVideoEntries.map(({ id }) => {
+        if (completedEntries.has(id)) {
+          return 1;
+        }
+
+        const total = totalBytes.get(id);
+        const loaded = loadedBytes.get(id) ?? 0;
+
+        if (total && total > 0) {
+          return Math.min(0.995, loaded / total);
+        }
+
+        return 0;
+      });
+      const nextProgress =
+        (assetProgress.reduce((sum, itemProgress) => sum + itemProgress, 0) /
+          preloadVideoEntries.length) *
+        100;
+
+      if (!isCancelled) {
+        setProgress(Math.min(100, Math.max(0, nextProgress)));
+      }
+    };
+
+    const preloadOne = async ({ id, src }: { id: PreloadEntryId; src: string }) => {
+      const response = await fetch(src, { cache: 'force-cache' });
+
+      if (!response.ok) {
+        throw new Error(`Failed to preload ${src}`);
+      }
+
+      const contentType = response.headers.get('content-type') ?? 'video/mp4';
+      const contentLength = Number(response.headers.get('content-length') ?? '0');
+
+      if (contentLength > 0) {
+        totalBytes.set(id, contentLength);
+      }
+
+      if (!response.body) {
+        const blob = await response.blob();
+        const total = Math.max(contentLength, blob.size, 1);
+        loadedBytes.set(id, total);
+        totalBytes.set(id, total);
+        completedEntries.add(id);
+        updateProgress();
+
+        const objectUrl = URL.createObjectURL(blob);
+        objectUrls.push(objectUrl);
+        return objectUrl;
+      }
+
+      const reader = response.body.getReader();
+      const chunks: BlobPart[] = [];
+      let receivedLength = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        if (value) {
+          chunks.push(value as unknown as BlobPart);
+          receivedLength += value.byteLength;
+          loadedBytes.set(id, receivedLength);
+          updateProgress();
+        }
+      }
+
+      const blob = new Blob(chunks, { type: contentType });
+      const total = Math.max(contentLength, receivedLength, blob.size, 1);
+      loadedBytes.set(id, total);
+      totalBytes.set(id, total);
+      completedEntries.add(id);
+      updateProgress();
+
+      const objectUrl = URL.createObjectURL(blob);
+      objectUrls.push(objectUrl);
+      return objectUrl;
+    };
+
+    Promise.all(preloadVideoEntries.map((entry) => preloadOne(entry)))
+      .then(([heroVideoSrc, workExperience, projectExperience, dreamScene]) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setSources({
+          heroVideoSrc,
+          featureVideos: {
+            workExperience,
+            projectExperience,
+            dreamScene,
+          },
+        });
+        setProgress(100);
+      })
+      .catch((error) => {
+        console.error(error);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setSources({
+          heroVideoSrc: siteMedia.heroVideoSrc,
+          featureVideos: { ...siteMedia.featureVideos },
+        });
+        setProgress(100);
+      });
+
+    return () => {
+      isCancelled = true;
+      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    };
+  }, []);
+
+  return { progress, sources };
 }
 
 function LoadingIntro({ progress, visible }: { progress: number; visible: boolean }) {
@@ -1036,7 +1149,23 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
       }`}
       style={{ opacity: visible ? 1 : 0 }}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,44,44,0.16),rgba(0,0,0,0)_34%)]" />
+      <Galaxy
+        className="absolute inset-0 opacity-75"
+        mouseRepulsion
+        mouseInteraction
+        density={0.72}
+        glowIntensity={0.52}
+        saturation={0}
+        hueShift={120}
+        twinkleIntensity={0.32}
+        rotationSpeed={0.08}
+        repulsionStrength={2}
+        autoCenterRepulsion={0}
+        starSpeed={0.48}
+        speed={0.9}
+        transparent={false}
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,44,44,0.14),rgba(0,0,0,0.82)_48%,rgba(0,0,0,0.96)_100%)]" />
       <div
         className="relative grid h-[178px] w-[178px] place-items-center rounded-full sm:h-[220px] sm:w-[220px]"
         style={{
@@ -1046,7 +1175,7 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
         <div className="absolute inset-[1px] rounded-full bg-black" />
         <div className="absolute inset-[10px] overflow-hidden rounded-full border border-[#1f5960]/70 bg-black shadow-[0_0_42px_rgba(97,220,163,0.12)]">
           <LetterGlitch
-            className="opacity-35"
+            className="opacity-[0.53]"
             glitchColors={['#173a34', '#2c7969', '#3b9bbd']}
             glitchSpeed={50}
             smooth
@@ -1065,135 +1194,46 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
 }
 
 export default function App() {
-  useHashAnchorScroll();
-  const [heroVideoProgress, setHeroVideoProgress] = useState(0);
-  const [isHeroVideoReady, setIsHeroVideoReady] = useState(false);
-  const [loaderProgress, setLoaderProgress] = useState(0);
-  const [shouldLoadFeatureVideos, setShouldLoadFeatureVideos] = useState(false);
-
-  useEffect(() => {
-    const fallbackTimer = window.setTimeout(() => {
-      setHeroVideoProgress(100);
-      setIsHeroVideoReady(true);
-      setLoaderProgress(100);
-      setShouldLoadFeatureVideos(true);
-    }, 3800);
-
-    return () => {
-      window.clearTimeout(fallbackTimer);
-    };
-  }, []);
-
-  useEffect(() => {
-    let hasReleasedHero = false;
-
-    const releaseHero = () => {
-      if (hasReleasedHero) {
-        return;
-      }
-
-      hasReleasedHero = true;
-      setHeroVideoProgress(100);
-      setIsHeroVideoReady(true);
-      setLoaderProgress(100);
-      setShouldLoadFeatureVideos(true);
-    };
-
-    const inspectHeroVideo = () => {
-      const heroVideo = document.querySelector<HTMLVideoElement>('#hero video');
-
-      if (!heroVideo) {
-        return;
-      }
-
-      if (heroVideo.readyState >= 2 || heroVideo.currentTime > 0) {
-        releaseHero();
-      }
-    };
-
-    inspectHeroVideo();
-    const inspectTimer = window.setInterval(inspectHeroVideo, 250);
-    const maximumWaitTimer = window.setTimeout(releaseHero, 10000);
-
-    return () => {
-      window.clearInterval(inspectTimer);
-      window.clearTimeout(maximumWaitTimer);
-    };
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setLoaderProgress((currentProgress) => {
-        const targetProgress = isHeroVideoReady ? 100 : Math.max(heroVideoProgress, 88);
-        const distance = targetProgress - currentProgress;
-
-        if (distance <= 0) {
-          return currentProgress;
-        }
-
-        const step = isHeroVideoReady ? Math.max(distance * 0.3, 3) : Math.max(distance * 0.045, 0.45);
-        return Math.min(targetProgress, currentProgress + step);
-      });
-    }, 80);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [heroVideoProgress, isHeroVideoReady]);
-
-  useEffect(() => {
-    if (heroVideoProgress < 100) {
-      return;
-    }
-
-    setIsHeroVideoReady(true);
-    setLoaderProgress(100);
-    setShouldLoadFeatureVideos(true);
-  }, [heroVideoProgress]);
+  const { progress: loaderProgress, sources: loadedMediaSources } = usePreloadedVideos();
+  const isMediaReady = Boolean(loadedMediaSources);
+  useHashAnchorScroll(isMediaReady);
 
   return (
     <main className="bg-black text-primary">
-      <LoadingIntro progress={loaderProgress} visible={loaderProgress < 99} />
-      <Hero
-        onVideoProgress={setHeroVideoProgress}
-        onVideoReady={() => {
-          setLoaderProgress(100);
-          setIsHeroVideoReady(true);
-          setShouldLoadFeatureVideos(true);
-        }}
-      />
-      <FeatureVideoWarmup enabled={shouldLoadFeatureVideos} />
-      <About />
-      <Features
-        animationMode={firstFeatureAnimationMode}
-        cards={workExperienceFeatures}
-        canvasTitle="工作经历"
-        headline="让 AI 不停留在概念里，而进入各行各业的日常流程。"
-        shouldLoadVideo={shouldLoadFeatureVideos}
-        showCardCta={false}
-        showCardNumbers={false}
-        videoSrc={siteMedia.featureVideos.workExperience}
-      />
-      <Features
-        cards={projectExperienceFeatures}
-        canvasTitle="项目经历"
-        headline="每个 AI 项目，都是一次把混沌变成结构的实验。"
-        layoutDirection="reverse"
-        sectionId="features-copy-1"
-        shouldLoadVideo={shouldLoadFeatureVideos}
-        showCardCta={false}
-        showCardNumbers={false}
-        videoSrc={siteMedia.featureVideos.projectExperience}
-      />
-      <Features
-        cards={dreamSceneFeatures}
-        canvasTitle="造梦现场"
-        featureDisplay="dream-squares"
-        headline="每一个小作品，都是我把想象交给代码验证的现场。"
-        sectionId="features-copy-2"
-        shouldLoadVideo={shouldLoadFeatureVideos}
-        videoSrc={siteMedia.featureVideos.dreamScene}
-      />
+      <LoadingIntro progress={loaderProgress} visible={!isMediaReady} />
+      {loadedMediaSources ? (
+        <>
+          <Hero videoSrc={loadedMediaSources.heroVideoSrc} />
+          <About />
+          <Features
+            animationMode={firstFeatureAnimationMode}
+            cards={workExperienceFeatures}
+            canvasTitle="工作经历"
+            headline="让 AI 不停留在概念里，而进入各行各业的日常流程。"
+            showCardCta={false}
+            showCardNumbers={false}
+            videoSrc={loadedMediaSources.featureVideos.workExperience}
+          />
+          <Features
+            cards={projectExperienceFeatures}
+            canvasTitle="项目经历"
+            headline="每个 AI 项目，都是一次把混沌变成结构的实验。"
+            layoutDirection="reverse"
+            sectionId="features-copy-1"
+            showCardCta={false}
+            showCardNumbers={false}
+            videoSrc={loadedMediaSources.featureVideos.projectExperience}
+          />
+          <Features
+            cards={dreamSceneFeatures}
+            canvasTitle="造梦现场"
+            featureDisplay="dream-squares"
+            headline="每一个小作品，都是我把想象交给代码验证的现场。"
+            sectionId="features-copy-2"
+            videoSrc={loadedMediaSources.featureVideos.dreamScene}
+          />
+        </>
+      ) : null}
     </main>
   );
 }
