@@ -421,12 +421,18 @@ function useHashAnchorScroll(isReady: boolean) {
   }, [isReady]);
 }
 
-function Hero({ videoSrc }: { videoSrc: string }) {
+function Hero({ onVideoReady, videoSrc }: { onVideoReady?: () => void; videoSrc: string }) {
   const [isVideoReady, setIsVideoReady] = useState(false);
+  const hasReportedReady = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const handleVideoReady = () => {
     setIsVideoReady(true);
+
+    if (!hasReportedReady.current) {
+      hasReportedReady.current = true;
+      onVideoReady?.();
+    }
   };
 
   useEffect(() => {
@@ -547,7 +553,7 @@ function About() {
   const letters = bodyText.split('');
 
   return (
-    <section className="bg-black px-4 py-16 sm:px-6 sm:py-20 md:py-28" id="about">
+    <section className="bg-transparent px-4 py-16 sm:px-6 sm:py-20 md:py-28" id="about">
       <div className="mx-auto max-w-6xl rounded-2xl bg-[#101010] px-6 py-16 text-center sm:px-8 sm:py-20 md:px-12 lg:py-28">
         <p className="mb-6 h-[1em] text-[10px] text-primary sm:text-xs" aria-hidden="true" />
 
@@ -951,7 +957,7 @@ function Features({
 
   return (
     <section
-      className="relative min-h-screen overflow-hidden bg-black px-4 py-16 sm:px-6 sm:py-20 md:py-28"
+      className="relative min-h-screen overflow-hidden bg-transparent px-4 py-16 sm:px-6 sm:py-20 md:py-28"
       id={sectionId}
       ref={sectionRef}
     >
@@ -1149,23 +1155,7 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
       }`}
       style={{ opacity: visible ? 1 : 0 }}
     >
-      <Galaxy
-        className="absolute inset-0 opacity-75"
-        mouseRepulsion
-        mouseInteraction
-        density={0.72}
-        glowIntensity={0.52}
-        saturation={0}
-        hueShift={120}
-        twinkleIntensity={0.32}
-        rotationSpeed={0.08}
-        repulsionStrength={2}
-        autoCenterRepulsion={0}
-        starSpeed={0.48}
-        speed={0.9}
-        transparent={false}
-      />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,44,44,0.14),rgba(0,0,0,0.82)_48%,rgba(0,0,0,0.96)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(13,44,44,0.16),rgba(0,0,0,0)_34%)]" />
       <div
         className="relative grid h-[178px] w-[178px] place-items-center rounded-full sm:h-[220px] sm:w-[220px]"
         style={{
@@ -1193,45 +1183,88 @@ function LoadingIntro({ progress, visible }: { progress: number; visible: boolea
   );
 }
 
+function SiteGalaxyBackground() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-0 bg-black">
+      <Galaxy
+        className="absolute inset-0 opacity-75"
+        mouseInteraction={false}
+        mouseRepulsion={false}
+        density={0.72}
+        glowIntensity={0.52}
+        saturation={0}
+        hueShift={120}
+        twinkleIntensity={0.32}
+        rotationSpeed={0.08}
+        repulsionStrength={2}
+        autoCenterRepulsion={0}
+        starSpeed={0.48}
+        speed={0.9}
+        transparent={false}
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,0,0,0)_0%,rgba(0,0,0,0.54)_58%,rgba(0,0,0,0.88)_100%)]" />
+    </div>
+  );
+}
+
 export default function App() {
   const { progress: loaderProgress, sources: loadedMediaSources } = usePreloadedVideos();
   const isMediaReady = Boolean(loadedMediaSources);
+  const [shouldRenderLoader, setShouldRenderLoader] = useState(true);
   useHashAnchorScroll(isMediaReady);
 
+  useEffect(() => {
+    if (!isMediaReady) {
+      setShouldRenderLoader(true);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setShouldRenderLoader(false);
+    }, 760);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isMediaReady]);
+
   return (
-    <main className="bg-black text-primary">
-      <LoadingIntro progress={loaderProgress} visible={!isMediaReady} />
+    <main className="relative min-h-screen overflow-hidden bg-black text-primary">
+      {shouldRenderLoader ? <LoadingIntro progress={loaderProgress} visible={!isMediaReady} /> : null}
       {loadedMediaSources ? (
         <>
-          <Hero videoSrc={loadedMediaSources.heroVideoSrc} />
-          <About />
-          <Features
-            animationMode={firstFeatureAnimationMode}
-            cards={workExperienceFeatures}
-            canvasTitle="工作经历"
-            headline="让 AI 不停留在概念里，而进入各行各业的日常流程。"
-            showCardCta={false}
-            showCardNumbers={false}
-            videoSrc={loadedMediaSources.featureVideos.workExperience}
-          />
-          <Features
-            cards={projectExperienceFeatures}
-            canvasTitle="项目经历"
-            headline="每个 AI 项目，都是一次把混沌变成结构的实验。"
-            layoutDirection="reverse"
-            sectionId="features-copy-1"
-            showCardCta={false}
-            showCardNumbers={false}
-            videoSrc={loadedMediaSources.featureVideos.projectExperience}
-          />
-          <Features
-            cards={dreamSceneFeatures}
-            canvasTitle="造梦现场"
-            featureDisplay="dream-squares"
-            headline="每一个小作品，都是我把想象交给代码验证的现场。"
-            sectionId="features-copy-2"
-            videoSrc={loadedMediaSources.featureVideos.dreamScene}
-          />
+          <SiteGalaxyBackground />
+          <div className="relative z-10">
+            <Hero videoSrc={loadedMediaSources.heroVideoSrc} />
+            <About />
+            <Features
+              animationMode={firstFeatureAnimationMode}
+              cards={workExperienceFeatures}
+              canvasTitle="工作经历"
+              headline="让 AI 不停留在概念里，而进入各行各业的日常流程。"
+              showCardCta={false}
+              showCardNumbers={false}
+              videoSrc={loadedMediaSources.featureVideos.workExperience}
+            />
+            <Features
+              cards={projectExperienceFeatures}
+              canvasTitle="项目经历"
+              headline="每个 AI 项目，都是一次把混沌变成结构的实验。"
+              layoutDirection="reverse"
+              sectionId="features-copy-1"
+              showCardCta={false}
+              showCardNumbers={false}
+              videoSrc={loadedMediaSources.featureVideos.projectExperience}
+            />
+            <Features
+              cards={dreamSceneFeatures}
+              canvasTitle="造梦现场"
+              featureDisplay="dream-squares"
+              headline="每一个小作品，都是我把想象交给代码验证的现场。"
+              sectionId="features-copy-2"
+              videoSrc={loadedMediaSources.featureVideos.dreamScene}
+            />
+          </div>
         </>
       ) : null}
     </main>
