@@ -14,9 +14,29 @@ import { siteMedia } from './siteConfig';
 const CREAM_TEXT = '#E1E0CC';
 const easeOutExpo: [number, number, number, number] = [0.16, 1, 0.3, 1];
 const cardEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const minimumLoaderDurationMs = 2200;
+const loaderTickMs = 80;
 
 type FeatureLayoutDirection = 'normal' | 'reverse';
 type FeatureAnimationMode = 'default' | 'impact';
+
+function getStagedLoaderProgress(elapsedMs: number) {
+  const elapsedSeconds = elapsedMs / 1000;
+
+  if (elapsedMs < 700) {
+    return 8 + (elapsedMs / 700) * 22;
+  }
+
+  if (elapsedMs < 1800) {
+    return 30 + ((elapsedMs - 700) / 1100) * 42;
+  }
+
+  if (elapsedMs < 3600) {
+    return 72 + ((elapsedMs - 1800) / 1800) * 16;
+  }
+
+  return Math.min(96, 88 + Math.log1p((elapsedSeconds - 3.6) * 1.4) * 4.8);
+}
 
 function getFeatureGridVariants(direction: FeatureLayoutDirection) {
   const isReverse = direction === 'reverse';
@@ -1210,27 +1230,76 @@ function SiteGalaxyBackground() {
 export default function App() {
   const { progress: loaderProgress, sources: loadedMediaSources } = usePreloadedVideos();
   const isMediaReady = Boolean(loadedMediaSources);
+  const loaderStartedAt = useRef<number | null>(null);
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [isLoaderVisible, setIsLoaderVisible] = useState(true);
   const [shouldRenderLoader, setShouldRenderLoader] = useState(true);
   useHashAnchorScroll(isMediaReady);
 
   useEffect(() => {
     if (!isMediaReady) {
       setShouldRenderLoader(true);
+      setIsLoaderVisible(true);
       return;
     }
 
+    if (displayProgress < 99.6) {
+      return;
+    }
+
+    setIsLoaderVisible(false);
+
     const timer = window.setTimeout(() => {
       setShouldRenderLoader(false);
-    }, 760);
+    }, 720);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isMediaReady]);
+  }, [displayProgress, isMediaReady]);
+
+  useEffect(() => {
+    if (!shouldRenderLoader) {
+      return;
+    }
+
+    if (loaderStartedAt.current === null) {
+      loaderStartedAt.current = Date.now();
+    }
+
+    const timer = window.setInterval(() => {
+      setDisplayProgress((currentProgress) => {
+        const elapsedMs = Date.now() - (loaderStartedAt.current ?? Date.now());
+        const stagedProgress = getStagedLoaderProgress(elapsedMs);
+
+        if (isMediaReady && elapsedMs >= minimumLoaderDurationMs) {
+          const distance = 100 - currentProgress;
+          return Math.min(100, currentProgress + Math.max(distance * 0.3, 2.4));
+        }
+
+        const realHint = Math.min(96, loaderProgress * 0.72);
+        const targetProgress = Math.min(96, Math.max(stagedProgress, realHint));
+        const distance = targetProgress - currentProgress;
+
+        if (distance <= 0) {
+          return currentProgress;
+        }
+
+        const easedStep = Math.min(2.6, Math.max(distance * 0.12, 0.28));
+        return Math.min(targetProgress, currentProgress + easedStep);
+      });
+    }, loaderTickMs);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isMediaReady, loaderProgress, shouldRenderLoader]);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-black text-primary">
-      {shouldRenderLoader ? <LoadingIntro progress={loaderProgress} visible={!isMediaReady} /> : null}
+      {shouldRenderLoader ? (
+        <LoadingIntro progress={displayProgress} visible={isLoaderVisible} />
+      ) : null}
       {loadedMediaSources ? (
         <>
           <SiteGalaxyBackground />
